@@ -89,15 +89,23 @@ Cypress.Commands.add(
     cy.on("window:before:load", win => {
       const originalFetch = win.fetch;
       function fetch(input: RequestInfo, init?: RequestInit) {
-        if (typeof input !== "string") {
-          throw new Error(
-            "Currently only support fetch(url, options), saw fetch(Request)"
-          );
+        let url: string, method: string | undefined, body: any;
+
+        // Parse both possible fetch() function signatures:
+        if (typeof input === 'string') {
+          // Parse arguments for `fetch(url, options)`:
+          url = input;
+          method = init && init.method;
+          body = init && init.body;
+        } else {
+          // Parse arguments for `fetch(Request)`:
+          url = input.url;
+          method = input.method;
+          body = input.body;
         }
-        if (input.indexOf(endpoint) !== -1 && init && init.method === "POST") {
-          const payload: GQLRequestPayload<AllOperations> = JSON.parse(
-            init.body as string
-          );
+
+        if (url.indexOf(endpoint) !== -1 && method === 'POST') {
+          const payload: GQLRequestPayload<AllOperations> = JSON.parse(body);
           const { operationName, query, variables } = payload;
           return graphql({
             schema,
