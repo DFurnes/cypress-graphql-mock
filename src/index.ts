@@ -24,6 +24,7 @@ interface SetOperationsOpts<AllOperations> {
 interface GQLRequestPayload<AllOperations extends Record<string, any>> {
   operationName: Extract<keyof AllOperations, string>;
   query: string;
+  extensions?: { persistedQuery: any };
   variables: any;
 }
 
@@ -93,6 +94,14 @@ Cypress.Commands.add(
         var operationName = payload.operationName,
           query = payload.query,
           variables = payload.variables;
+
+        // If using apollo-link-persisted-queries, return an error so that Apollo
+        // Client will retry as a standard GraphQL query <https://git.io/fjV9B>:
+        if (payload.extensions && payload.extensions.persistedQuery) {
+          return Promise.resolve({
+            errors: [{ message: "PersistedQueryNotSupported" }]
+          });
+        }
 
         return graphql({
           schema: schema,
