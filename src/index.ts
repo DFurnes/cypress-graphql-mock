@@ -88,6 +88,21 @@ Cypress.Commands.add(
 
     cy.on("window:before:load", win => {
       const originalFetch = win.fetch;
+
+      function mockGraphqlResponse(payload: GQLRequestPayload<AllOperations>): Promise<any> {
+        var operationName = payload.operationName,
+          query = payload.query,
+          variables = payload.variables;
+
+        return graphql({
+          schema: schema,
+          source: query,
+          variableValues: variables,
+          operationName: operationName,
+          rootValue: getRootValue<AllOperations>(currentOps, operationName, variables)
+        });
+      }
+
       function fetch(input: RequestInfo, init?: RequestInit) {
         if (typeof input !== "string") {
           throw new Error(
@@ -98,18 +113,14 @@ Cypress.Commands.add(
           const payload: GQLRequestPayload<AllOperations> = JSON.parse(
             init.body as string
           );
-          const { operationName, query, variables } = payload;
-          return graphql({
-            schema,
-            source: query,
-            variableValues: variables,
-            operationName,
-            rootValue: getRootValue<AllOperations>(
-              currentOps,
-              operationName,
-              variables
-            )
-          }).then((data: any) => new Response(JSON.stringify(data)));
+
+          // If an array of queries is sent, we're likely using apollo-link-batch-http
+          // and should resolve each of them independently before responding.
+          const response = Array.isArray(payload)
+            ? Promise.all(payload.map(mockGraphqlResponse))
+            : mockGraphqlResponse(payload);
+
+          return response.then((data: any) => new Response(JSON.stringify(data)));
         }
         return originalFetch(input, init);
       }
